@@ -53,7 +53,7 @@ def read_affluence() -> tuple[str | None, str]:
         with sync_playwright() as p:
             browser = p.chromium.launch()
             page = browser.new_page()
-            page.goto(URL, wait_until="networkidle", timeout=30000)
+            page.goto(URL, wait_until="domcontentloaded", timeout=45000)
 
             pattern = re.compile(r"Affluence en direct\s*:\s*(\d{1,3})\s*%")
 
