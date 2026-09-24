@@ -1,0 +1,44 @@
+name: Collecte affluence Calicéo
+
+on:
+  schedule:
+    # Toutes les 30 minutes, de 8h00 à 20h59 UTC (= 10h00 à 22h59 Paris en
+    # heure d'été). Le script collect.py filtre lui-même les heures
+    # réellement valides selon le jour (voir sa "fenêtre de collecte").
+    - cron: "0,30 8-20 * * *"
+  workflow_dispatch: {}  # permet de lancer un relevé manuellement pour tester
+
+permissions:
+  contents: write
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installer les dépendances
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+
+      - name: Lancer le relevé
+        run: python scripts/collect.py
+
+      - name: Enregistrer le résultat si de nouvelles données existent
+        run: |
+          git config user.name "Collecteur Calicéo"
+          git config user.email "actions@users.noreply.github.com"
+          if git diff --quiet -- data/readings.csv; then
+            echo "Aucune nouvelle donnée à enregistrer."
+          else
+            git add data/readings.csv
+            git commit -m "Relevé affluence $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git push
+          fi
