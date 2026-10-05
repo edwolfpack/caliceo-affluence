@@ -207,3 +207,4 @@ timestamp_paris,date,jour,heure,type_jour,pourcentage,statut
 2026-10-05 10:48,2026-10-05,lundi,10:48,semaine,15,ok
 2026-10-05 11:16,2026-10-05,lundi,11:16,semaine,18,ok
 2026-10-05 11:47,2026-10-05,lundi,11:47,semaine,17,ok
+2026-10-05 12:16,2026-10-05,lundi,12:16,semaine,0,suspect_zero
