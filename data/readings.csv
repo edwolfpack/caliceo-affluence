@@ -255,3 +255,4 @@ timestamp_paris,date,jour,heure,type_jour,pourcentage,statut
 2026-10-07 13:45,2026-10-07,mercredi,13:45,semaine,7,ok
 2026-10-07 14:19,2026-10-07,mercredi,14:19,semaine,9,ok
 2026-10-07 14:54,2026-10-07,mercredi,14:54,semaine,0,suspect_zero
+2026-10-07 15:18,2026-10-07,mercredi,15:18,semaine,0,suspect_zero
