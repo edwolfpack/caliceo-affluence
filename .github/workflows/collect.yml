@@ -2,19 +2,25 @@ name: Collecte affluence Calicéo
 
 on:
   schedule:
-    # Toutes les 30 minutes, de 8h00 à 20h59 UTC (= 10h00 à 22h59 Paris en
-    # heure d'été). Le script collect.py filtre lui-même les heures
-    # réellement valides selon le jour (voir sa "fenêtre de collecte").
-    - cron: "0,30 8-20 * * *"
+    # Toutes les 30 minutes, de 8h à 21h59 UTC (= 10h à 23h59 Paris en heure
+    # d'été, 9h à 22h59 en heure d'hiver). Minutes décalées (7 et 37) pour
+    # éviter les créneaux :00/:30, saturés chez GitHub (déclenchements sautés).
+    # Le script collect.py filtre lui-même les heures réellement valides
+    # selon le jour (voir sa "fenêtre de collecte").
+    - cron: "7,37 8-21 * * *"
   workflow_dispatch: {}  # permet de lancer un relevé manuellement pour tester
 
 permissions:
   contents: write
 
+concurrency:
+  group: collecte-affluence
+  cancel-in-progress: false
+
 jobs:
   collect:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Récupérer le dépôt
         uses: actions/checkout@v4
@@ -41,5 +47,6 @@ jobs:
           else
             git add data/readings.csv
             git commit -m "Relevé affluence $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git pull --rebase origin main
             git push
           fi
