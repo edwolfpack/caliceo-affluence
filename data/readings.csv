@@ -353,3 +353,4 @@ timestamp_paris,date,jour,heure,type_jour,pourcentage,statut
 2026-10-11 17:47,2026-10-11,dimanche,17:47,week-end,54,ok
 2026-10-11 18:18,2026-10-11,dimanche,18:18,week-end,0,suspect_zero
 2026-10-11 18:48,2026-10-11,dimanche,18:48,week-end,48,ok
+2026-10-11 19:17,2026-10-11,dimanche,19:17,week-end,49,ok
