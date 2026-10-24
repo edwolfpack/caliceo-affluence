@@ -2,12 +2,12 @@ name: Collecte affluence Calicéo
 
 on:
   schedule:
-    # Toutes les 30 minutes, de 8h à 21h59 UTC (= 10h à 23h59 Paris en heure
-    # d'été, 9h à 22h59 en heure d'hiver). Minutes décalées (7 et 37) pour
-    # éviter les créneaux :00/:30, saturés chez GitHub (déclenchements sautés).
-    # Le script collect.py filtre lui-même les heures réellement valides
-    # selon le jour (voir sa "fenêtre de collecte").
-    - cron: "7,37 8-21 * * *"
+    # GitHub saute la plupart des déclenchements programmés (constaté depuis
+    # le 14/10 : 2 à 5 runs/jour au lieu de 28). On ne dépend donc plus de
+    # lui pour la cadence : chaque run reste en vie ~5h30 et relève lui-même
+    # toutes les 30 min. Ce cron sert seulement à (re)lancer un run ; grâce
+    # au bloc concurrency, un run en attente prend le relais du précédent.
+    - cron: "11 7-21 * * *"
   workflow_dispatch: {}  # permet de lancer un relevé manuellement pour tester
 
 permissions:
@@ -20,7 +20,7 @@ concurrency:
 jobs:
   collect:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 345
     steps:
       - name: Récupérer le dépôt
         uses: actions/checkout@v4
@@ -35,18 +35,29 @@ jobs:
           pip install playwright
           playwright install --with-deps chromium
 
-      - name: Lancer le relevé
-        run: python scripts/collect.py
-
-      - name: Enregistrer le résultat si de nouvelles données existent
+      - name: Relever toutes les 30 minutes (:07 et :37)
         run: |
           git config user.name "Collecteur Calicéo"
           git config user.email "actions@users.noreply.github.com"
-          if git diff --quiet -- data/readings.csv; then
-            echo "Aucune nouvelle donnée à enregistrer."
-          else
-            git add data/readings.csv
-            git commit -m "Relevé affluence $(date -u +'%Y-%m-%d %H:%M UTC')"
-            git pull --rebase origin main
-            git push
-          fi
+          deadline=$(( $(date +%s) + 5*3600 + 30*60 ))
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            hour=$(date -u +%-H)
+            # Hors plage utile (8h-21h59 UTC) : rien à collecter, on s'arrête.
+            if [ "$hour" -lt 8 ] || [ "$hour" -ge 22 ]; then
+              echo "Hors plage horaire, arrêt."
+              break
+            fi
+            python scripts/collect.py || echo "collect.py a échoué, on continue."
+            if ! git diff --quiet -- data/readings.csv; then
+              git add data/readings.csv
+              git commit -m "Relevé affluence $(date -u +'%Y-%m-%d %H:%M UTC')"
+              git pull --rebase origin main
+              git push || { git pull --rebase origin main && git push; } \
+                || echo "push échoué, nouvelle tentative au prochain relevé."
+            fi
+            m=$(date +%-M); s=$(date +%-S)
+            if   [ "$m" -lt 7 ];  then wait=$(( 7 - m ))
+            elif [ "$m" -lt 37 ]; then wait=$(( 37 - m ))
+            else wait=$(( 67 - m )); fi
+            sleep $(( wait*60 - s ))
+          done
