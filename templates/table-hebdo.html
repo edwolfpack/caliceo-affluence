@@ -1,0 +1,691 @@
+<!-- GABARIT TABLE HEBDOMADAIRE — Affluence Calicéo
+     À copier pour chaque semaine. Ne remplacer QUE les 5 repères {{...}} :
+       {{N}}            numéro de la table (ex. 5)
+       {{SOUS_TITRE}}   phrase de dates + éventuelle remarque (ex. « Semaine du jeudi 22/10 au mercredi 28/10/2026. Chaque case = … »)
+       {{GRID}}         objet JSON jour → heure → % (null si pas de relevé), voir var GRID plus bas
+       {{NOTE}}         note du bas de la colonne de droite (texte brut, pas de HTML nécessaire)
+       {{STATUT}}       texte de la barre de statut (nb d'heures mesurées, relevés écartés, dernier relevé pris en compte)
+     Règles de calcul : voir HANDOFF-CODE.md (section « Design et logique des tables »). -->
+<title>Affluence Calicéo Table {{N}}</title>
+<style>
+  :root{
+    --bg:#EAF7FB;
+    --surface:#FFFFFF;
+    --surface-2:#D7F1F7;
+    --ink:#073344;
+    --muted:#4F8FA3;
+    --accent:#0e7490;
+    --accent-2:#06b6d4;
+    --border:#CDEEF5;
+
+    --band0:#06b6d4;
+    --band1:#049bb5;
+    --band2:#047f93;
+    --band3:#076577;
+    --band4:#0a4d5a;
+    --band5:#0e3843;
+    --band6:#0a2730;
+    --band6-ink:#EAF7FB;
+    --nodata:#E3F3F8;
+
+    --tooltip-bg:#073344;
+    --tooltip-ink:#EAF7FB;
+    --best-ring:#39FF14;
+    --best-outline:#073344;
+    --week-ring:#f97316;
+    --closed:#0A1620;
+
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#081A20;
+      --surface:#0D2630;
+      --surface-2:#123542;
+      --ink:#E4F6FA;
+      --muted:#7FB8C9;
+      --accent:#22d3ee;
+      --accent-2:#67e8f9;
+      --border:#173C48;
+
+      --band0:#def6fc;
+      --band1:#a5e7f8;
+      --band2:#6dd8f3;
+      --band3:#1fbdeb;
+      --band4:#0da8cc;
+      --band5:#0c87a4;
+      --band6:#0a687f;
+      --band6-ink:#E4F6FA;
+      --nodata:#132C34;
+
+      --tooltip-bg:#E4F6FA;
+      --tooltip-ink:#073344;
+      --best-ring:#4bff2e;
+      --best-outline:#081A20;
+      --week-ring:#fb923c;
+      --closed:#000000;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#081A20;
+    --surface:#0D2630;
+    --surface-2:#123542;
+    --ink:#E4F6FA;
+    --muted:#7FB8C9;
+    --accent:#22d3ee;
+    --accent-2:#67e8f9;
+    --border:#173C48;
+
+    --band0:#def6fc;
+    --band1:#a5e7f8;
+    --band2:#6dd8f3;
+    --band3:#1fbdeb;
+    --band4:#0da8cc;
+    --band5:#0c87a4;
+    --band6:#0a687f;
+    --band6-ink:#E4F6FA;
+    --nodata:#132C34;
+
+    --tooltip-bg:#E4F6FA;
+    --tooltip-ink:#073344;
+    --best-ring:#4bff2e;
+    --best-outline:#081A20;
+    --week-ring:#fb923c;
+    --closed:#000000;
+    color-scheme: dark;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Nunito',system-ui,sans-serif;
+    padding-inline:20px;
+  }
+  .title-font{font-family:'Baloo 2','Nunito',system-ui,sans-serif}
+
+  /* Fond aquatique : dégradé + texture de caustiques (reflets d'eau) dessinés,
+     fixe derrière le contenu. Les cartes restent opaques par-dessus pour que
+     les couleurs de données ne soient jamais altérées. */
+  .aqua-bg{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none}
+  .aqua-bg::before{
+    content:"";position:absolute;inset:-10%;
+    background:
+      radial-gradient(55% 45% at 18% 12%, rgba(255,255,255,.6), transparent 62%),
+      radial-gradient(65% 55% at 88% 6%, var(--accent-2) 0%, transparent 58%),
+      linear-gradient(165deg, var(--bg) 0%, var(--surface-2) 42%, var(--accent) 100%);
+  }
+  .aqua-bg::after{
+    content:"";position:absolute;inset:-25%;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012 0.018' numOctaves='2' seed='7' result='n'/%3E%3CfeColorMatrix in='n' type='matrix' values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23c)'/%3E%3C/svg%3E");
+    mix-blend-mode:soft-light;opacity:.55;
+    animation:aqua-drift 46s ease-in-out infinite alternate;
+  }
+  .aqua-bg svg.silhouette{position:absolute;left:0;bottom:-1%;width:100%;height:34%;opacity:.4}
+  @media (prefers-reduced-motion:reduce){ .aqua-bg::after{animation:none} }
+  @keyframes aqua-drift{ from{transform:translate(0,0) scale(1)} to{transform:translate(-3%,-2%) scale(1.06)} }
+
+  .wrap{max-width:1160px;margin:0 auto;padding-block:28px 60px;position:relative;z-index:0}
+
+  header{
+    display:flex;justify-content:space-between;align-items:flex-start;gap:16px;
+    flex-wrap:wrap;margin-bottom:18px;
+  }
+  h1{font-size:26px;font-weight:700;margin:0;color:var(--accent)}
+  .subtitle{font-size:13.5px;color:var(--muted);margin-top:4px;max-width:520px}
+
+  .legend{
+    display:flex;align-items:center;gap:10px;
+    background:color-mix(in srgb, var(--surface) 88%, transparent);
+    backdrop-filter:blur(10px) saturate(1.1);-webkit-backdrop-filter:blur(10px) saturate(1.1);
+    border:1px solid var(--border);border-radius:16px;padding:10px 16px;flex-wrap:wrap;
+    max-width:360px;
+  }
+  .legend-item{display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--accent)}
+  .legend-dot{width:13px;height:13px;border-radius:5px}
+
+  .status-bar{
+    display:flex;align-items:center;gap:10px;
+    background:color-mix(in srgb, var(--surface-2) 85%, transparent);
+    backdrop-filter:blur(10px) saturate(1.1);-webkit-backdrop-filter:blur(10px) saturate(1.1);
+    border-radius:14px;padding:10px 16px;margin-bottom:20px;font-size:13px;color:var(--ink)
+  }
+  .status-bar b{color:var(--accent)}
+
+  main{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
+
+  .card{
+    flex:1 1 560px;
+    background:color-mix(in srgb, var(--surface) 92%, transparent);
+    backdrop-filter:blur(10px) saturate(1.1);-webkit-backdrop-filter:blur(10px) saturate(1.1);
+    border:1px solid var(--border);
+    border-radius:24px;padding:20px;min-width:0;
+  }
+  .wave{display:block;margin-bottom:14px}
+
+  .grid-scroll{overflow-x:auto}
+  .grid{
+    display:grid;
+    grid-template-columns:52px repeat(7,minmax(52px,1fr));
+    gap:5px;
+    min-width:540px;
+  }
+  .col-head{
+    display:flex;align-items:center;justify-content:center;gap:4px;
+    font-size:12.5px;font-weight:700;color:var(--accent);padding-bottom:2px;
+  }
+  .col-head.upcoming{color:var(--muted);font-weight:600}
+  .row-label{
+    display:flex;align-items:center;justify-content:flex-end;padding-right:8px;
+    font-size:12px;color:var(--muted);font-weight:600;font-variant-numeric:tabular-nums;
+  }
+  .cell{
+    height:30px;border-radius:9px;background:var(--nodata);
+    transition:transform .08s ease, box-shadow .08s ease;
+  }
+  .cell.closed{background:var(--closed)}
+  .cell.has-data{cursor:pointer}
+  .cell.has-data:hover, .cell.has-data:focus-visible{
+    transform:scale(1.08);
+    box-shadow:0 0 0 2px var(--surface), 0 0 0 3.5px var(--accent-2);
+    outline:none;
+  }
+  .cell.best-of-day{
+    box-shadow:0 0 0 2.5px var(--best-outline);
+  }
+  .cell.best-of-day:hover, .cell.best-of-day:focus-visible{
+    box-shadow:0 0 0 2.5px var(--best-outline), 0 0 0 5px var(--best-ring);
+  }
+  .cell.week-best{
+    box-shadow:0 0 0 3px var(--week-ring);
+  }
+  .cell.week-best:hover, .cell.week-best:focus-visible{
+    box-shadow:0 0 0 3px var(--week-ring), 0 0 0 5.5px var(--accent-2);
+  }
+  .cell.week-best.best-of-day{
+    box-shadow:0 0 0 2.5px var(--best-outline), 0 0 0 6px var(--week-ring);
+  }
+  .cell.week-best.best-of-day:hover, .cell.week-best.best-of-day:focus-visible{
+    box-shadow:0 0 0 2.5px var(--best-outline), 0 0 0 6px var(--week-ring), 0 0 0 8.5px var(--best-ring);
+  }
+
+  aside{
+    flex:0 0 270px;
+    background:color-mix(in srgb, var(--surface-2) 90%, transparent);
+    backdrop-filter:blur(10px) saturate(1.1);-webkit-backdrop-filter:blur(10px) saturate(1.1);
+    border-radius:24px;padding:18px;
+    display:flex;flex-direction:column;gap:14px;
+  }
+  .aside-title{display:flex;align-items:center;gap:8px}
+  .aside-title span{font-size:17px;font-weight:700;color:var(--accent)}
+
+  .slot-card{
+    background:var(--surface);border-radius:14px;padding:11px 13px;
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+  }
+  .slot-card .when{font-size:13px;font-weight:700;color:var(--ink)}
+  .slot-card .pct{
+    font-size:13px;font-weight:800;color:#fff;background:var(--band0);
+    border-radius:8px;padding:2px 8px;font-variant-numeric:tabular-nums;
+  }
+  .avoid-card .pct{background:var(--band6);color:var(--band6-ink)}
+
+  .day-card{
+    background:var(--surface);border-radius:14px;padding:11px 13px;
+    display:flex;flex-direction:column;gap:4px;
+  }
+  .day-card .day-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .day-card .day-name{font-size:13px;font-weight:800;color:var(--ink)}
+  .day-card .window{
+    font-size:13px;font-weight:800;color:#fff;background:var(--best-ring-ink,#0B3B36);
+    background:var(--accent);border-radius:8px;padding:2px 9px;font-variant-numeric:tabular-nums;
+  }
+  .day-card .detail{font-size:11.5px;color:var(--muted)}
+  .day-card .detail b{color:var(--ink);font-variant-numeric:tabular-nums}
+
+  .week-best-card{
+    background:var(--surface);border-radius:14px;padding:11px 13px;
+    display:flex;flex-direction:column;gap:4px;
+    box-shadow:0 0 0 2px var(--week-ring) inset;
+  }
+  .week-best-card .day-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .week-best-card .day-name{font-size:13px;font-weight:800;color:var(--ink)}
+  .week-best-card .window{
+    font-size:13px;font-weight:800;color:#fff;background:var(--week-ring);
+    border-radius:8px;padding:2px 9px;font-variant-numeric:tabular-nums;
+  }
+  .week-best-card .detail{font-size:11.5px;color:var(--muted)}
+  .week-best-card .detail b{color:var(--ink);font-variant-numeric:tabular-nums}
+
+  .note{
+    font-size:12px;color:var(--muted);line-height:1.5;background:var(--surface);
+    border-radius:14px;padding:12px;
+  }
+
+  #tooltip{
+    position:fixed;pointer-events:none;z-index:50;
+    background:var(--tooltip-bg);color:var(--tooltip-ink);
+    font-size:12.5px;font-weight:700;padding:6px 10px;border-radius:9px;
+    transform:translate(-50%,-130%);white-space:nowrap;
+    opacity:0;transition:opacity .08s ease;
+  }
+  #tooltip.visible{opacity:1}
+
+  @media (max-width:720px){
+    main{flex-direction:column}
+    aside{flex:1 1 auto;width:100%}
+  }
+</style>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap">
+
+<div class="aqua-bg" aria-hidden="true">
+  <svg class="silhouette" viewBox="0 0 1200 260" preserveAspectRatio="none">
+    <path d="M0 140 Q 100 100 200 140 T 400 140 T 600 140 T 800 140 T 1000 140 T 1200 140 V 260 H 0 Z" fill="var(--accent)" opacity=".5"/>
+    <path d="M0 180 Q 120 150 240 180 T 480 180 T 720 180 T 960 180 T 1200 180 V 260 H 0 Z" fill="var(--accent-2)" opacity=".35"/>
+  </svg>
+</div>
+
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1 class="title-font">Affluence des Bains — Calicéo Saint-Cyr <span style="color:var(--accent);white-space:nowrap">· Table {{N}}</span></h1>
+      <div class="subtitle">{{SOUS_TITRE}}</div>
+    </div>
+    <div class="legend" id="legend"></div>
+  </header>
+
+  <div class="status-bar" id="statusBar"></div>
+
+  <main>
+    <div class="card">
+      <svg class="wave" width="100%" height="14" viewBox="0 0 1000 14" preserveAspectRatio="none">
+        <path d="M0 7 Q 25 0 50 7 T 100 7 T 150 7 T 200 7 T 250 7 T 300 7 T 350 7 T 400 7 T 450 7 T 500 7 T 550 7 T 600 7 T 650 7 T 700 7 T 750 7 T 800 7 T 850 7 T 900 7 T 950 7 T 1000 7"
+          stroke="var(--accent-2)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+      </svg>
+      <div class="grid-scroll">
+        <div class="grid" id="grid"></div>
+      </div>
+    </div>
+
+    <aside>
+      <div class="aside-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--week-ring)" stroke-width="2.2"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+        <span class="title-font" style="color:var(--week-ring)">Créneau de la semaine</span>
+      </div>
+      <div id="weekBest"></div>
+
+      <div class="aside-title" style="margin-top:4px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg>
+        <span class="title-font">Meilleurs créneaux</span>
+      </div>
+      <div id="bestSlots"></div>
+
+      <div class="aside-title" style="margin-top:4px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--band6)" stroke-width="2"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg>
+        <span class="title-font" style="color:var(--band6);font-size:15px">À éviter</span>
+      </div>
+      <div id="worstSlots"></div>
+
+      <div class="note">{{NOTE}}</div>
+    </aside>
+  </main>
+
+</div>
+
+<div id="tooltip" role="tooltip"></div>
+
+<script>
+(function(){
+  var SLOTS = [];
+  for (var h = 10; h <= 23; h++) SLOTS.push(h + "h");
+  var DAYS = ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"];
+  var DAY_LABEL = {lundi:"Lun",mardi:"Mar",mercredi:"Mer",jeudi:"Jeu",vendredi:"Ven",samedi:"Sam",dimanche:"Dim"};
+  var UPCOMING = {};
+
+  // GRID : jour -> heure -> pourcentage entier (moyenne des relevés `ok` de l'heure
+  // pleine, arrondie 0,5 vers le haut) ou null (pas de relevé). 14 heures par jour (10h..23h).
+  var GRID = {{GRID}};
+
+  // Seuils resserrés dans le bas de l'échelle (là où vivent la plupart des
+  // relevés réels, entre 5 % et 40 %) pour que les écarts de quelques points
+  // sous la barre des 10 % restent visibles, puis une graduation plus large
+  // au-delà.
+  var PALETTE = ["var(--band0)","var(--band1)","var(--band2)","var(--band3)","var(--band4)","var(--band5)","var(--band6)"];
+  var BAND_LABELS = ["Très calme (< 10 %)","Calme","Plutôt calme","Modéré","Assez chargé","Chargé","Très chargé"];
+
+  function band(v){
+    if (v < 10) return 0;
+    if (v < 15) return 1;
+    if (v < 20) return 2;
+    if (v < 28) return 3;
+    if (v < 38) return 4;
+    if (v < 50) return 5;
+    return 6;
+  }
+  function colorOf(v){ return PALETTE[band(v)]; }
+
+  // Legend
+  var legend = document.getElementById('legend');
+  BAND_LABELS.forEach(function(label, i){
+    var item = document.createElement('div');
+    item.className = 'legend-item';
+    var dot = document.createElement('div');
+    dot.className = 'legend-dot';
+    dot.style.background = PALETTE[i];
+    item.appendChild(dot);
+    item.appendChild(document.createTextNode(label));
+    legend.appendChild(item);
+  });
+  var ndItem = document.createElement('div');
+  ndItem.className = 'legend-item';
+  var ndDot = document.createElement('div');
+  ndDot.className = 'legend-dot';
+  ndDot.style.background = 'var(--nodata)';
+  ndItem.appendChild(ndDot);
+  ndItem.appendChild(document.createTextNode('Pas de relevé'));
+  legend.appendChild(ndItem);
+
+  var closedItem = document.createElement('div');
+  closedItem.className = 'legend-item';
+  var closedDot = document.createElement('div');
+  closedDot.className = 'legend-dot';
+  closedDot.style.background = 'var(--closed)';
+  closedItem.appendChild(closedDot);
+  closedItem.appendChild(document.createTextNode('Fermé'));
+  legend.appendChild(closedItem);
+
+  var bestItem = document.createElement('div');
+  bestItem.className = 'legend-item';
+  var bestDot = document.createElement('div');
+  bestDot.className = 'legend-dot';
+  bestDot.style.background = 'var(--best-ring)';
+  bestItem.appendChild(bestDot);
+  bestItem.appendChild(document.createTextNode('Meilleur créneau du jour'));
+  legend.appendChild(bestItem);
+
+  var weekItem = document.createElement('div');
+  weekItem.className = 'legend-item';
+  var weekDot = document.createElement('div');
+  weekDot.className = 'legend-dot';
+  weekDot.style.background = 'transparent';
+  weekDot.style.boxShadow = '0 0 0 2px var(--week-ring) inset';
+  weekItem.appendChild(weekDot);
+  weekItem.appendChild(document.createTextNode('Meilleur créneau de la semaine'));
+  legend.appendChild(weekItem);
+
+  // Tooltip
+  var tooltip = document.getElementById('tooltip');
+  function showTooltip(text, x, y){
+    tooltip.textContent = text;
+    tooltip.style.left = x + 'px';
+    tooltip.style.top = y + 'px';
+    tooltip.classList.add('visible');
+  }
+  function hideTooltip(){ tooltip.classList.remove('visible'); }
+
+  // Horaires réels des Bains : fermeture 22h (dim-jeu), 23h ven/sam,
+  // évacuation 15 min avant. Une entrée dure ~2h : un créneau ne peut
+  // donc pas être recommandé dans la dernière heure avant la fermeture
+  // (sinon la visite n'a pas le temps de se faire).
+  function closingHour(d){ return (d === 'vendredi' || d === 'samedi') ? 23 : 22; }
+  function isRecommendable(d, slot){
+    var h = parseInt(slot, 10);
+    return h !== closingHour(d) - 1;
+  }
+  // Le centre est fermé dès que l'heure de la case atteint ou dépasse
+  // l'heure de fermeture de ce jour (22h dim-jeu, 23h ven-sam).
+  function isClosed(d, slot){
+    var h = parseInt(slot, 10);
+    return h >= closingHour(d);
+  }
+
+  // Meilleure (plus basse) heure de chaque jour, pour l'anneau vert — uniquement
+  // parmi les heures recommandables, et seulement si le jour compte assez
+  // d'heures mesurées (seuil 6 depuis le 24/10 : 3-4 relevés isolés donnaient
+  // un anneau trompeur).
+  var bestOfDay = {};
+  DAYS.forEach(function(d){
+    var min = null, minSlot = null, measured = 0;
+    SLOTS.forEach(function(s){ if (GRID[d][s] !== null && !isClosed(d, s)) measured++; });
+    if (measured < 6) return; // pas de « meilleur créneau du jour » sur un jour presque vide
+    SLOTS.forEach(function(s){
+      var v = GRID[d][s];
+      if (v !== null && isRecommendable(d, s) && (min === null || v < min)) { min = v; minSlot = s; }
+    });
+    if (minSlot !== null) bestOfDay[d] = minSlot;
+  });
+
+  // Meilleur créneau de la semaine, tous jours confondus : on teste toutes
+  // les fenêtres de 2h et de 3h possibles (dans les heures d'ouverture, hors
+  // heure de fermeture) et on garde celle avec la moyenne la plus basse. En
+  // cas d'égalité on préfère la fenêtre de 3h, plus généreuse.
+  function computeWeekBest(){
+    var best = null;
+    DAYS.forEach(function(d){
+      var ch = closingHour(d);
+      [2, 3].forEach(function(len){
+        for (var start = 10; start <= ch - len; start++){
+          var end = start + len;
+          var vals = [], ok = true;
+          for (var h = start; h < end; h++){
+            var v = GRID[d][h + 'h'];
+            if (v === null) { ok = false; break; }
+            vals.push(v);
+          }
+          if (!ok) continue;
+          var avg = vals.reduce(function(a,b){ return a + b; }, 0) / vals.length;
+          if (best === null || avg < best.avg - 1e-9 ||
+              (Math.abs(avg - best.avg) < 1e-9 && len > best.length)) {
+            best = {avg: avg, d: d, start: start, end: end, length: len};
+          }
+        }
+      });
+    });
+    return best;
+  }
+  var weekBest = computeWeekBest();
+
+  // Grid
+  var grid = document.getElementById('grid');
+  var frag = document.createDocumentFragment();
+
+  frag.appendChild(document.createElement('div'));
+  DAYS.forEach(function(d){
+    var h = document.createElement('div');
+    h.className = 'col-head' + (UPCOMING[d] ? ' upcoming' : '');
+    h.textContent = DAY_LABEL[d];
+    frag.appendChild(h);
+  });
+
+  SLOTS.forEach(function(slot){
+    var label = document.createElement('div');
+    label.className = 'row-label';
+    label.textContent = slot;
+    frag.appendChild(label);
+
+    DAYS.forEach(function(d){
+      var closed = isClosed(d, slot);
+      var v = closed ? null : GRID[d][slot];
+      var isBest = bestOfDay[d] === slot;
+      var hourNum = parseInt(slot, 10);
+      var isWeekBest = !!weekBest && weekBest.d === d && hourNum >= weekBest.start && hourNum < weekBest.end;
+      var cell = document.createElement('div');
+      cell.className = 'cell' + (v !== null ? ' has-data' : '') + (isBest ? ' best-of-day' : '') + (closed ? ' closed' : '') + (isWeekBest ? ' week-best' : '');
+      if (closed) {
+        var closedText = DAY_LABEL[d] + ' ' + slot + ' : fermé';
+        cell.tabIndex = 0;
+        cell.addEventListener('mouseenter', function(e){ showTooltip(closedText, e.clientX, e.clientY); });
+        cell.addEventListener('mousemove', function(e){ showTooltip(closedText, e.clientX, e.clientY); });
+        cell.addEventListener('mouseleave', hideTooltip);
+        cell.addEventListener('focus', function(e){
+          var r = cell.getBoundingClientRect();
+          showTooltip(closedText, r.left + r.width/2, r.top);
+        });
+        cell.addEventListener('blur', hideTooltip);
+      } else if (v !== null) {
+        cell.style.background = isBest ? 'var(--best-ring)' : colorOf(v);
+        cell.tabIndex = 0;
+        var text = DAY_LABEL[d] + ' ' + slot + ' : ' + v + '%' +
+          (isBest ? ' — meilleur créneau du jour' : '') +
+          (isWeekBest ? ' — meilleur créneau de la semaine' : '');
+        cell.addEventListener('mouseenter', function(e){ showTooltip(text, e.clientX, e.clientY); });
+        cell.addEventListener('mousemove', function(e){ showTooltip(text, e.clientX, e.clientY); });
+        cell.addEventListener('mouseleave', hideTooltip);
+        cell.addEventListener('focus', function(e){
+          var r = cell.getBoundingClientRect();
+          showTooltip(text, r.left + r.width/2, r.top);
+        });
+        cell.addEventListener('blur', hideTooltip);
+      }
+      frag.appendChild(cell);
+    });
+  });
+
+  grid.appendChild(frag);
+
+  // Classements — « meilleurs créneaux » respecte la règle de recommandation
+  // (visite de 2h) ; « à éviter » regarde le niveau d'affluence réel.
+  var flatAll = [];
+  var flatRecommendable = [];
+  DAYS.forEach(function(d){
+    SLOTS.forEach(function(s){
+      var v = GRID[d][s];
+      if (v === null) return;
+      var entry = {v:v, d:d, s:s};
+      flatAll.push(entry);
+      if (isRecommendable(d, s)) flatRecommendable.push(entry);
+    });
+  });
+  flatAll.sort(function(a,b){ return a.v - b.v; });
+  flatRecommendable.sort(function(a,b){ return a.v - b.v; });
+
+  function renderList(el, items, avoid){
+    var out = document.createElement('div');
+    out.style.display = 'flex';
+    out.style.flexDirection = 'column';
+    out.style.gap = '8px';
+    items.forEach(function(it){
+      var card = document.createElement('div');
+      card.className = 'slot-card' + (avoid ? ' avoid-card' : '');
+      var when = document.createElement('span');
+      when.className = 'when';
+      when.textContent = DAY_LABEL[it.d] + ' ' + it.s;
+      var pct = document.createElement('span');
+      pct.className = 'pct';
+      pct.textContent = it.v + '%';
+      card.appendChild(when);
+      card.appendChild(pct);
+      out.appendChild(card);
+    });
+    el.appendChild(out);
+  }
+
+  // Fenêtre de 3h contenant le meilleur créneau de chaque jour : parmi les
+  // 3 positions possibles du meilleur créneau dans la fenêtre (début, milieu,
+  // fin), on garde celle dont la moyenne est la plus basse. Une fenêtre n'est
+  // proposée que si CHACUNE de ses heures a été mesurée.
+  function bestWindow(d){
+    var best = bestOfDay[d];
+    if (!best) return null;
+    var b = parseInt(best, 10);
+    var openStart = 10, openEnd = closingHour(d);
+
+    var candidates = [
+      { start: b,     end: b + 3 },
+      { start: b - 1, end: b + 2 },
+      { start: b - 2, end: b + 1 }
+    ];
+
+    var chosen = null;
+    candidates.forEach(function(c){
+      if (c.start < openStart || c.end > openEnd) return;
+      var sum = 0, count = 0;
+      for (var h = c.start; h < c.end; h++){
+        var val = GRID[d][h + 'h'];
+        if (val !== null) { sum += val; count++; }
+      }
+      if (count < c.end - c.start) return;
+      var avg = sum / count;
+      if (chosen === null || avg < chosen.avg) chosen = { start: c.start, end: c.end, avg: avg };
+    });
+
+    if (!chosen) return null;
+    return { start: chosen.start, end: chosen.end, best: b, v: GRID[d][best] };
+  }
+
+  var dayCards = document.getElementById('bestSlots');
+  DAYS.forEach(function(d){
+    var w = bestWindow(d);
+    var card = document.createElement('div');
+    card.className = 'day-card';
+    if (!w) {
+      var nrow = document.createElement('div');
+      nrow.className = 'day-row';
+      var nname = document.createElement('span');
+      nname.className = 'day-name';
+      nname.textContent = DAY_LABEL[d];
+      var nwin = document.createElement('span');
+      nwin.className = 'window';
+      nwin.style.cssText = 'background:transparent;color:var(--muted);padding:0;font-weight:600;font-size:13px';
+      nwin.textContent = 'Pas assez de relevés';
+      nrow.appendChild(nname);
+      nrow.appendChild(nwin);
+      card.appendChild(nrow);
+      dayCards.appendChild(card);
+      return;
+    }
+    var row = document.createElement('div');
+    row.className = 'day-row';
+    var name = document.createElement('span');
+    name.className = 'day-name';
+    name.textContent = DAY_LABEL[d];
+    var win = document.createElement('span');
+    win.className = 'window';
+    win.textContent = w.start + 'h – ' + w.end + 'h';
+    row.appendChild(name);
+    row.appendChild(win);
+    var detail = document.createElement('div');
+    detail.className = 'detail';
+    detail.innerHTML = 'le plus calme vers <b>' + w.best + 'h</b> (' + w.v + '%)';
+    card.appendChild(row);
+    card.appendChild(detail);
+    dayCards.appendChild(card);
+  });
+
+  if (weekBest) {
+    var weekCard = document.createElement('div');
+    weekCard.className = 'week-best-card';
+    var weekRow = document.createElement('div');
+    weekRow.className = 'day-row';
+    var weekName = document.createElement('span');
+    weekName.className = 'day-name';
+    weekName.textContent = DAY_LABEL[weekBest.d];
+    var weekWin = document.createElement('span');
+    weekWin.className = 'window';
+    weekWin.textContent = weekBest.start + 'h – ' + weekBest.end + 'h';
+    weekRow.appendChild(weekName);
+    weekRow.appendChild(weekWin);
+    var weekDetail = document.createElement('div');
+    weekDetail.className = 'detail';
+    weekDetail.innerHTML = '<b>' + Math.round(weekBest.avg) + '%</b> d\'affluence en moyenne sur ce créneau — le plus calme de toute la semaine';
+    weekCard.appendChild(weekRow);
+    weekCard.appendChild(weekDetail);
+    document.getElementById('weekBest').appendChild(weekCard);
+  } else {
+    var emptyCard = document.createElement('div');
+    emptyCard.className = 'week-best-card';
+    emptyCard.innerHTML = '<div class="detail">Pas assez de relevés consécutifs pour proposer un créneau de la semaine.</div>';
+    document.getElementById('weekBest').appendChild(emptyCard);
+  }
+
+  renderList(document.getElementById('worstSlots'), flatAll.slice(-3).reverse(), true);
+
+  var total = DAYS.length * SLOTS.length;
+  document.getElementById('statusBar').innerHTML =
+    '<b>' + flatAll.length + '</b> heures avec données sur ' + total + ' possibles · {{STATUT}}';
+})();
+</script>
