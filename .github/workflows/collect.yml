@@ -40,6 +40,18 @@ jobs:
           git config user.name "Collecteur Calicéo"
           git config user.email "actions@users.noreply.github.com"
           deadline=$(( $(date +%s) + 5*3600 + 30*60 ))
+          # Pousse le dernier commit ; en cas de rejet, se recale sur main
+          # (data/readings.csv est en merge=union, voir .gitattributes) puis
+          # réessaie. Ne doit JAMAIS faire échouer le run : un échec ici
+          # arrêtait toute la collecte (cas du 25/10 à 18h07 UTC).
+          push_reading() {
+            for try in 1 2 3; do
+              git push -q origin HEAD:main && return 0
+              git fetch -q origin main
+              git rebase origin/main || git rebase --abort
+            done
+            return 1
+          }
           while [ "$(date +%s)" -lt "$deadline" ]; do
             hour=$(date -u +%-H)
             # Hors plage utile (8h-21h59 UTC) : rien à collecter, on s'arrête.
@@ -47,13 +59,14 @@ jobs:
               echo "Hors plage horaire, arrêt."
               break
             fi
+            # Repart de l'état réel de main (un autre run a pu pousser entre-temps).
+            git fetch -q origin main && git reset -q --hard origin/main \
+              || echo "synchronisation impossible, on continue."
             python scripts/collect.py || echo "collect.py a échoué, on continue."
             if ! git diff --quiet -- data/readings.csv; then
               git add data/readings.csv
-              git commit -m "Relevé affluence $(date -u +'%Y-%m-%d %H:%M UTC')"
-              git pull --rebase origin main
-              git push || { git pull --rebase origin main && git push; } \
-                || echo "push échoué, nouvelle tentative au prochain relevé."
+              git commit -q -m "Relevé affluence $(date -u +'%Y-%m-%d %H:%M UTC')"
+              push_reading || echo "push échoué, nouvelle tentative au prochain relevé."
             fi
             m=$(date +%-M); s=$(date +%-S)
             if   [ "$m" -lt 7 ];  then wait=$(( 7 - m ))
