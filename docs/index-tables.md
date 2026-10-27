@@ -35,6 +35,9 @@ propres, sans chevauchement.
   isolés donnaient un anneau trompeur). Quand aucune fenêtre n'existe pour la semaine,
   la carte « Créneau de la semaine » affiche « Pas assez de relevés consécutifs ».
 - Légende : « Pas de relevé » (et non « Pas encore ») pour une semaine passée.
+- Vacances scolaires (règle du 27/10) : deux grilles séparées, hors vacances et vacances, sur la
+  même page ; les jours hors période sont grisés. Toussaint 2026 : sam 17/10 → dim 01/11.
+  Sous chaque colonne : relevés valides / maximum réaliste (22 dim→jeu, 24 ven/sam).
 - Le gabarit à jour est `templates/table-hebdo.html` (copie dans le dépôt) et
   `template-table-hebdo.html` dans le projet claude.ai, version du 24/10. Il remplace
   l'ancien fichier. Les 5 repères à remplacer sont `{{N}}`, `{{SOUS_TITRE}}`,
@@ -63,7 +66,7 @@ Vérifier quand même que la dernière date est celle d'aujourd'hui ou de la vei
 | 1 | 24/09/2026 → 30/09/2026 (jeudi complété avec le 01/10) | ✅ Faite, lundi 18h corrigé le 25/10 | https://claude.ai/artifact/AyxqJuBk46pXnbKcD3VGSD |
 | 2 | 01/10/2026 → 07/10/2026 | ✅ Faite le 08/10 (week-end 03-04/10 quasi vide : relevés manquants ; lundi 21h manquant) | https://claude.ai/artifact/QC6VgPcyLVQeUDa4vt4joT |
 | 3 | 08/10/2026 → 14/10/2026 | 🟡 Provisoire (construite le 14/10 à 22h : mercredi 14/10 quasi vide, 2 relevés exploitables ; mercredi n'a jamais été complété ensuite : la collecte s'est arrêtée) | https://claude.ai/artifact/ELn3EzM8xFL5mJEWT6Rc8R |
-| 4 | 15/10/2026 → 21/10/2026 | 🔴 Quasi vide (faite le 24/10 : 16 relevés dont 15 valides, collecte interrompue ; à ne pas exploiter) | https://claude.ai/artifact/Crc2MSrBnSRf78shMpNAiu |
+| 4 | 15/10/2026 → 21/10/2026 | 🔴 Quasi vide (faite le 24/10 : 16 relevés dont 15 valides, collecte interrompue ; à ne pas exploiter). Refaite le 27/10 en deux grilles : hors vacances (jeu 15-ven 16) et vacances de la Toussaint (sam 17-mer 21), relevés valides par jour sur 22/24 | https://claude.ai/artifact/Crc2MSrBnSRf78shMpNAiu |
 | 5 | 22/10/2026 → 28/10/2026 | ⏳ À faire | — |
 | 6 | 29/10/2026 → 04/11/2026 | ⏳ À faire | — |
 | 7 | 05/11/2026 → 11/11/2026 | ⏳ À faire | — |
