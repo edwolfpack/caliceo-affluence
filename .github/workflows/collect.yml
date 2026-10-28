@@ -8,6 +8,9 @@ on:
     # toutes les 30 min. Ce cron sert seulement à (re)lancer un run ; grâce
     # au bloc concurrency, un run en attente prend le relais du précédent.
     - cron: "11 7-21 * * *"
+    # Crons du petit matin : GitHub a sauté tous ceux de la matinée le 27/10.
+    # Un run lancé avant l'ouverture attend 10h30 (Paris) au lieu de s'arrêter.
+    - cron: "41 5-9 * * *"
   workflow_dispatch: {}  # permet de lancer un relevé manuellement pour tester
 
 permissions:
@@ -53,24 +56,36 @@ jobs:
             return 1
           }
           while [ "$(date +%s)" -lt "$deadline" ]; do
-            hour=$(date -u +%-H)
-            # Hors plage utile (8h-21h59 UTC) : rien à collecter, on s'arrête.
-            if [ "$hour" -lt 8 ] || [ "$hour" -ge 22 ]; then
+            # Heure de Paris (HHMM) : suit seule le changement d'heure.
+            paris=$(( 10#$(TZ=Europe/Paris date +%H%M) ))
+            # Nuit (0h-6h) ou après la fermeture (22h40) : rien à collecter, on s'arrête.
+            if [ "$paris" -lt 600 ] || [ "$paris" -ge 2240 ]; then
               echo "Hors plage horaire, arrêt."
               break
             fi
-            # Repart de l'état réel de main (un autre run a pu pousser entre-temps).
-            git fetch -q origin main && git reset -q --hard origin/main \
-              || echo "synchronisation impossible, on continue."
-            python scripts/collect.py || echo "collect.py a échoué, on continue."
-            if ! git diff --quiet -- data/readings.csv; then
-              git add data/readings.csv
-              git commit -q -m "Relevé affluence $(date -u +'%Y-%m-%d %H:%M UTC')"
-              push_reading || echo "push échoué, nouvelle tentative au prochain relevé."
+            # Avant 10h30 : on attend l'ouverture sans relever.
+            if [ "$paris" -lt 1030 ]; then
+              echo "Avant l'ouverture, attente."
+            else
+              # Repart de l'état réel de main (un autre run a pu pousser entre-temps).
+              git fetch -q origin main && git reset -q --hard origin/main \
+                || echo "synchronisation impossible, on continue."
+              python scripts/collect.py || echo "collect.py a échoué, on continue."
+              if ! git diff --quiet -- data/readings.csv; then
+                git add data/readings.csv
+                git commit -q -m "Relevé affluence $(date -u +'%Y-%m-%d %H:%M UTC')"
+                push_reading || echo "push échoué, nouvelle tentative au prochain relevé."
+              fi
             fi
             m=$(date +%-M); s=$(date +%-S)
             if   [ "$m" -lt 7 ];  then wait=$(( 7 - m ))
             elif [ "$m" -lt 37 ]; then wait=$(( 37 - m ))
             else wait=$(( 67 - m )); fi
+            # Le prochain relevé tomberait après l'échéance : on termine proprement
+            # plutôt que d'être tué par timeout-minutes (cas du 26/10, run « cancelled »).
+            if [ $(( $(date +%s) + wait*60 - s )) -ge "$deadline" ]; then
+              echo "Échéance atteinte, le run suivant prend le relais."
+              break
+            fi
             sleep $(( wait*60 - s ))
           done
