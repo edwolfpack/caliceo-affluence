@@ -1,20 +1,20 @@
 name: Collecte affluence Calicéo
 
 on:
+  # La cadence ne dépend plus des crons : GitHub les retarde de plusieurs
+  # heures (du 28/10 au 09/11, premier run du jour entre 12h et 15h Paris,
+  # matinées toutes vides). Chaque run relance lui-même le suivant par
+  # workflow_dispatch (démarrage immédiat) juste avant son échéance : la
+  # chaîne tourne 24h/24 et ne relève que pendant l'ouverture.
+  # Ce cron n'est qu'un secours pour relancer la chaîne si elle casse ;
+  # grâce au bloc concurrency, il ne crée jamais de second run en parallèle.
   schedule:
-    # GitHub saute la plupart des déclenchements programmés (constaté depuis
-    # le 14/10 : 2 à 5 runs/jour au lieu de 28). On ne dépend donc plus de
-    # lui pour la cadence : chaque run reste en vie ~5h30 et relève lui-même
-    # toutes les 30 min. Ce cron sert seulement à (re)lancer un run ; grâce
-    # au bloc concurrency, un run en attente prend le relais du précédent.
-    - cron: "11 7-21 * * *"
-    # Crons du petit matin : GitHub a sauté tous ceux de la matinée le 27/10.
-    # Un run lancé avant l'ouverture attend 10h30 (Paris) au lieu de s'arrêter.
-    - cron: "41 5-9 * * *"
-  workflow_dispatch: {}  # permet de lancer un relevé manuellement pour tester
+    - cron: "17 * * * *"
+  workflow_dispatch: {}  # relance de la chaîne, ou lancement manuel
 
 permissions:
   contents: write
+  actions: write  # pour relancer le run suivant
 
 concurrency:
   group: collecte-affluence
@@ -23,7 +23,7 @@ concurrency:
 jobs:
   collect:
     runs-on: ubuntu-24.04
-    timeout-minutes: 345
+    timeout-minutes: 355
     steps:
       - name: Récupérer le dépôt
         uses: actions/checkout@v4
@@ -39,6 +39,7 @@ jobs:
           playwright install --with-deps chromium
 
       - name: Relever toutes les 30 minutes (:07 et :37)
+        timeout-minutes: 340
         run: |
           git config user.name "Collecteur Calicéo"
           git config user.email "actions@users.noreply.github.com"
@@ -55,37 +56,44 @@ jobs:
             done
             return 1
           }
-          while [ "$(date +%s)" -lt "$deadline" ]; do
-            # Heure de Paris (HHMM) : suit seule le changement d'heure.
-            paris=$(( 10#$(TZ=Europe/Paris date +%H%M) ))
-            # Nuit (0h-6h) ou après la fermeture (22h40) : rien à collecter, on s'arrête.
-            if [ "$paris" -lt 600 ] || [ "$paris" -ge 2240 ]; then
-              echo "Hors plage horaire, arrêt."
-              break
-            fi
-            # Avant 10h30 : on attend l'ouverture sans relever.
-            if [ "$paris" -lt 1030 ]; then
-              echo "Avant l'ouverture, attente."
-            else
-              # Repart de l'état réel de main (un autre run a pu pousser entre-temps).
-              git fetch -q origin main && git reset -q --hard origin/main \
-                || echo "synchronisation impossible, on continue."
-              python scripts/collect.py || echo "collect.py a échoué, on continue."
-              if ! git diff --quiet -- data/readings.csv; then
-                git add data/readings.csv
-                git commit -q -m "Relevé affluence $(date -u +'%Y-%m-%d %H:%M UTC')"
-                push_reading || echo "push échoué, nouvelle tentative au prochain relevé."
-              fi
-            fi
+          while :; do
+            # Attend le prochain créneau (:07 ou :37) AVANT de relever : un run
+            # qui prend le relais ne relève donc jamais hors cadence ni en double.
             m=$(date +%-M); s=$(date +%-S)
             if   [ "$m" -lt 7 ];  then wait=$(( 7 - m ))
             elif [ "$m" -lt 37 ]; then wait=$(( 37 - m ))
             else wait=$(( 67 - m )); fi
-            # Le prochain relevé tomberait après l'échéance : on termine proprement
-            # plutôt que d'être tué par timeout-minutes (cas du 26/10, run « cancelled »).
+            # Le créneau tomberait après l'échéance : le run suivant le prendra.
             if [ $(( $(date +%s) + wait*60 - s )) -ge "$deadline" ]; then
               echo "Échéance atteinte, le run suivant prend le relais."
               break
             fi
             sleep $(( wait*60 - s ))
+            # Heure de Paris (HHMM) : suit seule le changement d'heure.
+            # collect.py applique ensuite la fermeture exacte du jour.
+            paris=$(( 10#$(TZ=Europe/Paris date +%H%M) ))
+            if [ "$paris" -lt 1030 ] || [ "$paris" -ge 2240 ]; then
+              echo "Bains fermés ($paris), pas de relevé."
+              continue
+            fi
+            # Repart de l'état réel de main (un autre run a pu pousser entre-temps).
+            git fetch -q origin main && git reset -q --hard origin/main \
+              || echo "synchronisation impossible, on continue."
+            python scripts/collect.py || echo "collect.py a échoué, on continue."
+            if ! git diff --quiet -- data/readings.csv; then
+              git add data/readings.csv
+              git commit -q -m "Relevé affluence $(date -u +'%Y-%m-%d %H:%M UTC')"
+              push_reading || echo "push échoué, nouvelle tentative au prochain relevé."
+            fi
           done
+
+      - name: Relancer le run suivant
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for try in 1 2 3; do
+            gh workflow run collect.yml --repo "$GITHUB_REPOSITORY" --ref main && exit 0
+            sleep 10
+          done
+          echo "Relance impossible : le cron de secours reprendra la chaîne."
