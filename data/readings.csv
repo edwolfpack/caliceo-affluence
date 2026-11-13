@@ -787,3 +787,4 @@ timestamp_paris,date,jour,heure,type_jour,pourcentage,statut
 2026-11-13 15:07,2026-11-13,vendredi,15:07,semaine,0,suspect_zero
 2026-11-13 15:37,2026-11-13,vendredi,15:37,semaine,34,ok
 2026-11-13 16:07,2026-11-13,vendredi,16:07,semaine,32,ok
+2026-11-13 16:37,2026-11-13,vendredi,16:37,semaine,31,ok
