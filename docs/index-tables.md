@@ -64,9 +64,9 @@ Vérifier quand même que la dernière date est celle d'aujourd'hui ou de la vei
 | 2 | 01/10/2026 → 07/10/2026 | ✅ Faite le 08/10 (week-end 03-04/10 quasi vide : relevés manquants ; lundi 21h manquant) | https://claude.ai/artifact/QC6VgPcyLVQeUDa4vt4joT |
 | 3 | 08/10/2026 → 14/10/2026 | 🟡 Provisoire (construite le 14/10 à 22h : mercredi 14/10 quasi vide, 2 relevés exploitables ; mercredi n'a jamais été complété ensuite : la collecte s'est arrêtée) | https://claude.ai/artifact/ELn3EzM8xFL5mJEWT6Rc8R |
 | 4 | 15/10/2026 → 21/10/2026 | 🔴 Quasi vide (faite le 24/10 : 16 relevés dont 15 valides, collecte interrompue ; à ne pas exploiter) | https://claude.ai/artifact/Crc2MSrBnSRf78shMpNAiu |
-| 5 | 22/10/2026 → 28/10/2026 | ⏳ À faire | — |
-| 6 | 29/10/2026 → 04/11/2026 | ⏳ À faire | — |
-| 7 | 05/11/2026 → 11/11/2026 | ⏳ À faire | — |
+| 5 | 22/10/2026 → 28/10/2026 | 🟡 Provisoire (données jusqu'au 27/10 18h37, une seule grille vacances ; à refaire au même lien) | https://claude.ai/artifact/JdSxDfaamxcXyHRXnJJKuo |
+| 6 | 29/10/2026 → 04/11/2026 | ✅ Faite le 18/11 (2 grilles : vacances jeu→dim, hors vacances lun→mer ; 126 valides sur 130, aucun relevé avant 12h12) | https://claude.ai/artifact/2nMQzcXkhwqe7amBGNaBTQ |
+| 7 | 05/11/2026 → 11/11/2026 | ✅ Faite le 18/11 (hors vacances ; 121 valides sur 123 ; matins vides jusqu'au 10/11, mer 11/11 férié, trou 16h-17h le 11/11) | https://claude.ai/artifact/2ZDfhrRmaFzpQwPrSDJfgv |
 | 8 | 12/11/2026 → 18/11/2026 | ⏳ À faire | — |
 | 9 | 19/11/2026 → 25/11/2026 | ⏳ À faire | — |
 | 10 | 26/11/2026 → 02/12/2026 | ⏳ À faire | — |
@@ -109,6 +109,8 @@ Une grille cumulée de toutes les données du 24/09 au 14/10 existe déjà : htt
 | 5 | Tables 17-20 | ⏳ À faire | — |
 | 6 | Tables 21-24 | ⏳ À faire | — |
 | 7 | Tables 25-28 | ⏳ À faire | — |
+
+**Générateur (18/11) :** `scripts/tables/build.py` + `run.py` produisent une table à 1 ou 2 grilles (hors vacances / vacances) au design de la Table 4 (compteur de relevés par jour). Ils partent de la Table 4 téléchargée (Artifact read, path index.html) comme base HTML. Adapter `run.py` (dates, textes) puis lancer.
 
 ## Procédure à suivre à chaque rappel (pour une future session)
 
