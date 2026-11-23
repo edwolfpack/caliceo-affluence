@@ -1003,3 +1003,4 @@ timestamp_paris,date,jour,heure,type_jour,pourcentage,statut
 2026-11-22 20:07,2026-11-22,dimanche,20:07,week-end,33,ok
 2026-11-22 20:37,2026-11-22,dimanche,20:37,week-end,29,ok
 2026-11-22 21:07,2026-11-22,dimanche,21:07,week-end,20,ok
+2026-11-23 10:37,2026-11-23,lundi,10:37,semaine,13,ok
